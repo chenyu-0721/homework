@@ -89,6 +89,29 @@ const requestListener = async (req, res) => {
       })
     );
     res.end();
+  } else if (req.url.startsWith("/posts/") && req.method == "PATCH") {
+    req.on("end", async () => {
+      try {
+        const data = JSON.parse(body);
+
+        if (data !== undefined) {
+          const id = req.url.split("/").pop();
+          await Post.findByIdAndUpdate({ _id: id }, data);
+          res.writeHead(200, headers);
+          res.write(
+            JSON.stringify({
+              status: "success",
+              data: await Post.find({ _id: id }),
+            })
+          );
+          res.end();
+        } else {
+          errHandle(res);
+        }
+      } catch {
+        errHandle(res);
+      }
+    });
   } else if (req.method == "OPTIONS") {
     res.writeHead(200, headers);
     res.end();
