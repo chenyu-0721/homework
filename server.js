@@ -1,7 +1,9 @@
 const http = require("http");
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
-
+const handleSuccess = require("./handleSuccess");
+const handleError = require("./handleError");
+const headers = require("./headers");
 dotenv.config({ path: "./config.env" });
 
 const DB = process.env.DATABASE.replace(
@@ -18,13 +20,6 @@ const Post = require("./models/post.js");
 // schema 結束
 
 const requestListener = async (req, res) => {
-  const headers = {
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, Content-Length, X-Requested-With",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "PATCH, POST, GET,OPTIONS,DELETE",
-    "Content-Type": "application/json",
-  };
   let body = "";
   req.on("data", (chunk) => {
     body += chunk;
@@ -32,14 +27,7 @@ const requestListener = async (req, res) => {
 
   if (req.url == "/posts" && req.method == "GET") {
     const post = await Post.find();
-    res.writeHead(200, headers);
-    res.write(
-      JSON.stringify({
-        status: "success",
-        post,
-      })
-    );
-    res.end();
+    handleSuccess(res, post);
   } else if (req.url == "/posts" && req.method == "POST") {
     req.on("end", async () => {
       try {
@@ -49,46 +37,27 @@ const requestListener = async (req, res) => {
             name: data.name,
             content: data.content,
           });
-          res.writeHead(200, headers);
-          res.write(
-            JSON.stringify({
-              status: "success",
-              data: newPost,
-            })
-          );
-          res.end();
+          handleSuccess(res, newPost);
         } else {
-          res.writeHead(400, headers);
-          res.write(
-            JSON.stringify({
-              status: "false",
-              message: "欄位未填寫正確，或無此 todo ID",
-            })
-          );
-          res.end();
+          const message = "欄位未填寫正確，或無該筆貼文 id";
+          handleError(res, message);
         }
       } catch (error) {
-        res.writeHead(400, headers);
-        res.write(
-          JSON.stringify({
-            status: "false",
-            message: error,
-          })
-        );
-        res.end();
+        handleError(res, error);
       }
     });
   } else if (req.url.startsWith("/posts/") && req.method == "DELETE") {
     const id = req.url.split("/").pop();
-    await Post.findByIdAndDelete(id);
-    res.writeHead(200, headers);
-    res.write(
-      JSON.stringify({
-        status: "success",
-        data: null,
-      })
-    );
-    res.end();
+    try {
+      await Post.findByIdAndDelete(id);
+      handleSuccess(res, null);
+    } catch (err) {
+      handleError(res, err);
+    }
+  } else if (req.url == "/posts" && req.method == "DELETE") {
+    await Post.deleteMany();
+    const newMessage = "已刪除全部貼文";
+    handleSuccess(res, newMessage);
   } else if (req.url.startsWith("/posts/") && req.method == "PATCH") {
     req.on("end", async () => {
       try {
@@ -96,31 +65,26 @@ const requestListener = async (req, res) => {
 
         if (data !== undefined) {
           const id = req.url.split("/").pop();
-          await Post.findByIdAndUpdate({ _id: id }, data);
-          res.writeHead(200, headers);
-          res.write(
-            JSON.stringify({
-              status: "success",
-              data: await Post.find({ _id: id }),
-            })
-          );
-          res.end();
+          await Post.findByIdAndUpdate({ _id: id }, data, { new: true });
+          const newData = await Post.find({ _id: id });
+          handleSuccess(res, newData);
         } else {
-          errHandle(res);
+          const message = "欄位未填寫正確，或無該筆貼文 id";
+          handleError(res, message);
         }
-      } catch {
-        errHandle(res);
+      } catch (error) {
+        const message = error;
+        handleError(res, message);
       }
     });
   } else if (req.method == "OPTIONS") {
-    res.writeHead(200, headers);
-    res.end();
+    handleSuccess(res);
   } else {
     res.writeHead(404, headers);
     res.write(
       JSON.stringify({
-        status: "false",
-        message: "無此網站路由",
+        status: "failed",
+        message: "not found",
       })
     );
     res.end();
@@ -128,4 +92,4 @@ const requestListener = async (req, res) => {
 };
 
 const server = http.createServer(requestListener);
-server.listen(process.env.PORT);
+server.listen(3000);
